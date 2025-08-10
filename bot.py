@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import requests
 import json
 import os
+import re # Импортируем библиотеку для поиска по шаблону
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 WIRECRM_API_KEY = os.environ.get('WIRECRM_API_KEY')
@@ -12,9 +13,6 @@ if not TELEGRAM_BOT_TOKEN or not WIRECRM_API_KEY:
 app = Flask(__name__)
 
 def get_deal_details(deal_id):
-    """
-    Получает полную информацию о сделке (заказе) из WireCRM по её ID.
-    """
     if not deal_id:
         return None
     url = f"https://wirecrm.com/api/v1/deals/{deal_id}"
@@ -22,10 +20,9 @@ def get_deal_details(deal_id):
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            # ИЗМЕНЕНИЕ: Теперь мы правильно обрабатываем ответ, который является списком
             deal_data_list = response.json().get('data', [])
             if isinstance(deal_data_list, list) and deal_data_list:
-                deal_data = deal_data_list[0] # Берем первый элемент из списка
+                deal_data = deal_data_list[0]
                 print(f"Получены полные данные по сделке {deal_id}: {deal_data}")
                 return deal_data
             else:
@@ -38,36 +35,22 @@ def get_deal_details(deal_id):
         print(f"Критическая ошибка при запросе сделки из CRM: {e}")
         return None
 
-def get_worker_telegram_id(worker_id):
-    if not worker_id:
-        print("Ошибка: ID работника не передан.")
+def find_telegram_id_in_description(description):
+    """
+    Ищет в тексте описания строку "ID: {число}" и возвращает число.
+    """
+    if not description:
         return None
-
-    url = f"https://wirecrm.com/api/v1/workers/{worker_id}"
-    headers = {'X-API-KEY': WIRECRM_API_KEY}
     
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            worker_data = response.json().get('data', {})
-            if not worker_data:
-                 print(f"ОШИБКА: Не найдены данные для работника {worker_id}")
-                 return None
-            
-            print(f"Получены данные по работнику ID {worker_id}: {worker_data}")
-            telegram_id = worker_data.get('phone')
-            
-            if telegram_id:
-                print(f"Найден Telegram ID в поле 'phone': {telegram_id}")
-                return telegram_id
-            else:
-                print(f"ОШИБКА: В карточке работника {worker_id} не заполнено поле 'Телефон'.")
-                return None
-        else:
-            print(f"Ошибка запроса данных работника {worker_id} из CRM: {response.text}")
-            return None
-    except Exception as e:
-        print(f"Критическая ошибка при запросе работника из CRM: {e}")
+    # Ищем шаблон "ID: " за которым следуют цифры
+    match = re.search(r'ID:\s*(\d+)', description, re.IGNORECASE)
+    
+    if match:
+        telegram_id = match.group(1)
+        print(f"Найден Telegram ID в описании: {telegram_id}")
+        return telegram_id
+    else:
+        print("Telegram ID в описании не найден.")
         return None
 
 def send_telegram_message(chat_id, text, keyboard=None):
@@ -128,15 +111,10 @@ def wirecrm_webhook():
             return jsonify({"status": "error", "message": "Could not fetch full order details"}), 404
 
         order_name = full_order_info.get('name', 'Без названия')
-        worker_id = full_order_info.get('worker')
-        
-        if not worker_id:
-            print("ОШИБКА: В полных данных заказа отсутствует ID работника ('worker').")
-            return jsonify({"status": "error", "message": "worker_id not found in full details"}), 400
+        description = full_order_info.get('description', '')
 
-        print(f"Заказ №{order_id}. Назначен работник с ID: {worker_id}")
-
-        master_telegram_id = get_worker_telegram_id(worker_id)
+        # ИЗМЕНЕНИЕ: Ищем Telegram ID прямо в описании
+        master_telegram_id = find_telegram_id_in_description(description)
         
         if master_telegram_id:
             order_text = (
@@ -148,8 +126,8 @@ def wirecrm_webhook():
             send_telegram_message(master_telegram_id, order_text, keyboard)
             return jsonify({"status": "success"}), 200
         else:
-            print(f"Не удалось отправить уведомление, так как не найден Telegram ID для работника {worker_id}.")
-            return jsonify({"status": "error", "message": "telegram_id not found for worker"}), 404
+            print(f"Не удалось отправить уведомление, так как не найден Telegram ID в описании заказа {order_id}.")
+            return jsonify({"status": "error", "message": "telegram_id not found in description"}), 404
         
     except Exception as e:
         print(f"Критическая ошибка при обработке вебхука: {e}")
