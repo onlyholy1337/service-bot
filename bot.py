@@ -67,12 +67,33 @@ def create_new_order_keyboard(order_id):
 @app.route('/webhook', methods=['POST'])
 def wirecrm_webhook():
     print("\n--- Получен новый вебхук от WireCRM! ---")
-    data = request.get_json(force=True)
+    
+    # ИЗМЕНЕНИЕ: Добавляем подробное логирование для диагностики
+    print("--- Заголовки запроса (Headers): ---")
+    print(request.headers)
+    print("--- Сырые данные запроса (Raw Data): ---")
+    print(request.data)
+    
+    # Пытаемся получить JSON, как и раньше
+    data = request.get_json(force=True, silent=True) # silent=True чтобы не вызывать ошибку сразу
+    
     if not data:
-        print("ОШИБКА: Не удалось получить данные из вебхука.")
-        return jsonify({"status": "error", "message": "No data received"}), 400
+        print("ОШИБКА: Не удалось автоматически распознать JSON. Возможно, данные в другом формате.")
+        # Пытаемся обработать данные как форму, если JSON не сработал
+        if request.form:
+            print("Обнаружены данные в формате формы. Пытаемся обработать...")
+            # WireCRM может отправлять JSON строкой в одном из полей формы
+            form_data_str = list(request.form.keys())[0]
+            print(f"Строка из формы: {form_data_str}")
+            try:
+                data = json.loads(form_data_str)
+            except json.JSONDecodeError:
+                print("Критическая ошибка: не удалось преобразовать данные из формы в JSON.")
+                return jsonify({"status": "error", "message": "Invalid form data format"}), 400
+        else:
+            return jsonify({"status": "error", "message": "No data received or format not recognized"}), 400
 
-    print("Полные данные от CRM:", json.dumps(data, indent=2, ensure_ascii=False))
+    print("Полные данные от CRM (после обработки):", json.dumps(data, indent=2, ensure_ascii=False))
     
     try:
         order_info = data.get('msg', {})
