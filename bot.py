@@ -22,9 +22,15 @@ def get_deal_details(deal_id):
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            deal_data = response.json().get('data', {})
-            print(f"Получены полные данные по сделке {deal_id}: {deal_data}")
-            return deal_data
+            # ИЗМЕНЕНИЕ: Теперь мы правильно обрабатываем ответ, который является списком
+            deal_data_list = response.json().get('data', [])
+            if isinstance(deal_data_list, list) and deal_data_list:
+                deal_data = deal_data_list[0] # Берем первый элемент из списка
+                print(f"Получены полные данные по сделке {deal_id}: {deal_data}")
+                return deal_data
+            else:
+                print(f"Ошибка: Данные по сделке {deal_id} пришли в неожиданном формате или пусты.")
+                return None
         else:
             print(f"Ошибка запроса данных сделки {deal_id}: {response.text}")
             return None
@@ -117,7 +123,6 @@ def wirecrm_webhook():
             print("ОШИБКА: В вебхуке отсутствует ID заказа.")
             return jsonify({"status": "error", "message": "order_id not found in webhook"}), 400
 
-        # Получаем полную информацию о заказе
         full_order_info = get_deal_details(order_id)
         if not full_order_info:
             return jsonify({"status": "error", "message": "Could not fetch full order details"}), 404
