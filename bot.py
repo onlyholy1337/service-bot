@@ -11,6 +11,27 @@ if not TELEGRAM_BOT_TOKEN or not WIRECRM_API_KEY:
 
 app = Flask(__name__)
 
+def get_deal_details(deal_id):
+    """
+    Получает полную информацию о сделке (заказе) из WireCRM по её ID.
+    """
+    if not deal_id:
+        return None
+    url = f"https://wirecrm.com/api/v1/deals/{deal_id}"
+    headers = {'X-API-KEY': WIRECRM_API_KEY}
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            deal_data = response.json().get('data', {})
+            print(f"Получены полные данные по сделке {deal_id}: {deal_data}")
+            return deal_data
+        else:
+            print(f"Ошибка запроса данных сделки {deal_id}: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Критическая ошибка при запросе сделки из CRM: {e}")
+        return None
+
 def get_worker_telegram_id(worker_id):
     if not worker_id:
         print("Ошибка: ID работника не передан.")
@@ -28,7 +49,6 @@ def get_worker_telegram_id(worker_id):
                  return None
             
             print(f"Получены данные по работнику ID {worker_id}: {worker_data}")
-            
             telegram_id = worker_data.get('phone')
             
             if telegram_id:
@@ -72,42 +92,42 @@ def wirecrm_webhook():
     try:
         if request.is_json:
             data = request.get_json()
-            print("Данные успешно получены как JSON.")
-        
         elif request.form:
-            print("Данные получены как форма. Пытаемся извлечь JSON...")
             form_data_str = list(request.form.keys())[0]
             data = json.loads(form_data_str)
-            print("JSON успешно извлечен из данных формы.")
-
         else:
             raw_data = request.data
             if raw_data:
-                print("Данные получены как сырой текст. Пытаемся обработать...")
                 data_str = raw_data.decode('utf-8')
                 data = json.loads(data_str)
-                print("JSON успешно извлечен из сырых данных.")
-
         if not data:
-            print("ОШИБКА: Не удалось извлечь данные ни одним из способов.")
+            print("ОШИБКА: Не удалось извлечь данные.")
             return jsonify({"status": "error", "message": "Could not extract data"}), 400
-
     except Exception as e:
         print(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось обработать входящие данные. Ошибка: {e}")
         return jsonify({"status": "error", "message": "Failed to parse request data"}), 400
     
-    print("Полные данные от CRM (после обработки):", json.dumps(data, indent=2, ensure_ascii=False))
+    print("Данные из вебхука:", json.dumps(data, indent=2, ensure_ascii=False))
     
     try:
-        order_info = data.get('msg', {})
-        order_id = order_info.get('id', 'Неизвестный ID')
-        order_name = order_info.get('name', 'Без названия')
+        order_info_from_webhook = data.get('msg', {})
+        order_id = order_info_from_webhook.get('id')
         
-        worker_id = order_info.get('worker')
+        if not order_id:
+            print("ОШИБКА: В вебхуке отсутствует ID заказа.")
+            return jsonify({"status": "error", "message": "order_id not found in webhook"}), 400
+
+        # Получаем полную информацию о заказе
+        full_order_info = get_deal_details(order_id)
+        if not full_order_info:
+            return jsonify({"status": "error", "message": "Could not fetch full order details"}), 404
+
+        order_name = full_order_info.get('name', 'Без названия')
+        worker_id = full_order_info.get('worker')
         
         if not worker_id:
-            print("ОШИБКА: В данных вебхука отсутствует ID работника ('worker').")
-            return jsonify({"status": "error", "message": "worker_id not found"}), 400
+            print("ОШИБКА: В полных данных заказа отсутствует ID работника ('worker').")
+            return jsonify({"status": "error", "message": "worker_id not found in full details"}), 400
 
         print(f"Заказ №{order_id}. Назначен работник с ID: {worker_id}")
 
