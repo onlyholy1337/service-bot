@@ -11,35 +11,42 @@ if not TELEGRAM_BOT_TOKEN or not WIRECRM_API_KEY:
 
 app = Flask(__name__)
 
-def get_user_telegram_id(user_id):
-    if not user_id:
-        print("Ошибка: ID пользователя не передан.")
+def get_worker_telegram_id(worker_id):
+    if not worker_id:
+        print("Ошибка: ID работника не передан.")
         return None
 
-    url = f"https://wirecrm.com/api/v1/users/{user_id}"
+    # ИЗМЕНЕНИЕ: Обращаемся к правильному разделу API - "workers"
+    url = f"https://wirecrm.com/api/v1/workers/{worker_id}"
     headers = {'X-API-KEY': WIRECRM_API_KEY}
     
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            user_data = response.json()
-            print(f"Получены данные по пользователю ID {user_id}: {user_data}")
+            # Структура ответа может отличаться, поэтому берем весь JSON
+            worker_data = response.json().get('data', {})
+            if not worker_data:
+                 print(f"ОШИБКА: Не найдены данные для работника {worker_id}")
+                 return None
             
-            telegram_id = user_data.get('custom', {}).get('telegram_id')
-            if not telegram_id:
-                 telegram_id = user_data.get('telegram')
+            print(f"Получены данные по работнику ID {worker_id}: {worker_data}")
+            
+            # ИЗМЕНЕНИЕ: Поле для Telegram ID у работников может называться иначе.
+            # Пробуем найти его в поле 'phone' или 'description', куда его можно временно вписать.
+            # Это временное решение, пока мы не увидим точную структуру данных.
+            telegram_id = worker_data.get('phone') # Пробуем поле "Телефон"
             
             if telegram_id:
-                print(f"Найден Telegram ID: {telegram_id}")
+                print(f"Найден Telegram ID в поле 'phone': {telegram_id}")
                 return telegram_id
             else:
-                print(f"ОШИБКА: В профиле пользователя {user_id} не найдено поле 'Telegram ID'.")
+                print(f"ОШИБКА: В карточке работника {worker_id} не заполнено поле 'Телефон'.")
                 return None
         else:
-            print(f"Ошибка запроса данных пользователя {user_id} из CRM: {response.text}")
+            print(f"Ошибка запроса данных работника {worker_id} из CRM: {response.text}")
             return None
     except Exception as e:
-        print(f"Критическая ошибка при запросе пользователя из CRM: {e}")
+        print(f"Критическая ошибка при запросе работника из CRM: {e}")
         return None
 
 def send_telegram_message(chat_id, text, keyboard=None):
@@ -85,7 +92,7 @@ def wirecrm_webhook():
 
         print(f"Заказ №{order_id}. Назначен работник с ID: {worker_id}")
 
-        master_telegram_id = get_user_telegram_id(worker_id)
+        master_telegram_id = get_worker_telegram_id(worker_id)
         
         if master_telegram_id:
             order_text = (
