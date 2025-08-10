@@ -16,14 +16,12 @@ def get_worker_telegram_id(worker_id):
         print("Ошибка: ID работника не передан.")
         return None
 
-    # ИЗМЕНЕНИЕ: Обращаемся к правильному разделу API - "workers"
     url = f"https://wirecrm.com/api/v1/workers/{worker_id}"
     headers = {'X-API-KEY': WIRECRM_API_KEY}
     
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
-            # Структура ответа может отличаться, поэтому берем весь JSON
             worker_data = response.json().get('data', {})
             if not worker_data:
                  print(f"ОШИБКА: Не найдены данные для работника {worker_id}")
@@ -31,10 +29,7 @@ def get_worker_telegram_id(worker_id):
             
             print(f"Получены данные по работнику ID {worker_id}: {worker_data}")
             
-            # ИЗМЕНЕНИЕ: Поле для Telegram ID у работников может называться иначе.
-            # Пробуем найти его в поле 'phone' или 'description', куда его можно временно вписать.
-            # Это временное решение, пока мы не увидим точную структуру данных.
-            telegram_id = worker_data.get('phone') # Пробуем поле "Телефон"
+            telegram_id = worker_data.get('phone')
             
             if telegram_id:
                 print(f"Найден Telegram ID в поле 'phone': {telegram_id}")
