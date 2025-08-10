@@ -67,20 +67,35 @@ def create_new_order_keyboard(order_id):
 @app.route('/webhook', methods=['POST'])
 def wirecrm_webhook():
     print("\n--- Получен новый вебхук от WireCRM! ---")
+    data = None
     
-    # ИЗМЕНЕНИЕ: Новый, более надежный способ получения данных
+    # ИЗМЕНЕНИЕ: Новый, самый надежный способ получения данных
     try:
-        # Получаем сырые байты из тела запроса
-        raw_data = request.data
-        if not raw_data:
-            print("ОШИБКА: Тело запроса пустое.")
-            return jsonify({"status": "error", "message": "Request body is empty"}), 400
+        # Способ 1: Пробуем прочитать как JSON (стандартный способ)
+        if request.is_json:
+            data = request.get_json()
+            print("Данные успешно получены как JSON.")
         
-        print(f"--- Сырые данные (Raw Data): ---\n{raw_data}\n--------------------")
-        
-        # Декодируем байты в строку и парсим как JSON
-        data_str = raw_data.decode('utf-8')
-        data = json.loads(data_str)
+        # Способ 2: Если не JSON, пробуем прочитать как данные из формы
+        elif request.form:
+            print("Данные получены как форма. Пытаемся извлечь JSON...")
+            # Часто CRM отправляет JSON строкой в единственном ключе формы
+            form_data_str = list(request.form.keys())[0]
+            data = json.loads(form_data_str)
+            print("JSON успешно извлечен из данных формы.")
+
+        # Способ 3: Если и это не сработало, читаем сырые данные
+        else:
+            raw_data = request.data
+            if raw_data:
+                print("Данные получены как сырой текст. Пытаемся обработать...")
+                data_str = raw_data.decode('utf-8')
+                data = json.loads(data_str)
+                print("JSON успешно извлечен из сырых данных.")
+
+        if not data:
+            print("ОШИБКА: Не удалось извлечь данные ни одним из способов.")
+            return jsonify({"status": "error", "message": "Could not extract data"}), 400
 
     except Exception as e:
         print(f"КРИТИЧЕСКАЯ ОШИБКА: Не удалось обработать входящие данные. Ошибка: {e}")
@@ -125,4 +140,4 @@ def index():
     return "Сервер для Telegram-бота работает!"
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(host=
