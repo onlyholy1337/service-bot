@@ -69,22 +69,17 @@ def wirecrm_webhook():
     print("\n--- Получен новый вебхук от WireCRM! ---")
     data = None
     
-    # ИЗМЕНЕНИЕ: Новый, самый надежный способ получения данных
     try:
-        # Способ 1: Пробуем прочитать как JSON (стандартный способ)
         if request.is_json:
             data = request.get_json()
             print("Данные успешно получены как JSON.")
         
-        # Способ 2: Если не JSON, пробуем прочитать как данные из формы
         elif request.form:
             print("Данные получены как форма. Пытаемся извлечь JSON...")
-            # Часто CRM отправляет JSON строкой в единственном ключе формы
             form_data_str = list(request.form.keys())[0]
             data = json.loads(form_data_str)
             print("JSON успешно извлечен из данных формы.")
 
-        # Способ 3: Если и это не сработало, читаем сырые данные
         else:
             raw_data = request.data
             if raw_data:
@@ -140,4 +135,4 @@ def index():
     return "Сервер для Telegram-бота работает!"
 
 if __name__ == '__main__':
-    app.run(host=
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
